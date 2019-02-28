@@ -1,0 +1,32 @@
+#### reference genome is hs37d5 
+#### input read fastq files are barcode split read fastq files 
+#### variant calling with Sentieon version of GATK requires installation and license from SENTIEON. Alternatively, variant calling could be done with GATK3.6
+
+#################################################################
+######   mapping barcode split reads to reference hs37d5   ######
+#################################################################
+
+#### mapping with bwa MEM
+bwa mem -t 100 -R "@RG\tID:L0\tSM:L0\tPL:COMPLETE" path_to_hs37d5_reference.fa path_to_split_Read1.fq.gz path_to_split_Read2.fq.gz 1>aln_mem.sam 2>aln.err
+
+perl -e '$readlen=100; $a="";$b="";$id=""; $n=0; while(<>){if(!(/^@/)){chomp;@t=split; if($t[0] ne $id){if($n>=2){print "$a\n$b\n";} $a="$_"; $n=1;}elsif(length($t[9]) == $readlen){$b="$_"; $n++;} $id=$t[0]; }else{print "$_";}} if($n>=2){print "$a\n$b\n";}' aln_mem.sam > aln.sam
+
+#### sort by coordinates
+samtools view -buhS -t path_to_hs37d5_reference.fa.fai -T path_to_hs37d5_reference.fa aln.sam | samtools sort -@ 100 -m 1000000000 -T L0.sort -o L0.sort.bam -
+
+#### mark duplicates in sorted bam file with picard 
+java -jar picard.jar MarkDuplicates I=./L0.sort.bam M=./L0.sort.rmdup.txt O=./L0.sort.rmdup.bam VALIDATION_STRINGENCY=SILENT READ_NAME_REGEX='[a-zA-Z0-9]+_([0-9]+)#([0-9]+)_([0-9]+)_([0-9]+)' TMP_DIR=./
+
+#################################################################
+######    variant calling with Sentieon version of GATK4    ######
+#################################################################
+
+sentieon driver -r path_to_hs37d5_reference.fa  -t 100 \
+    -i L0.sort.rmdup.addRG.bam \
+    --algo Haplotyper L0_sentieon.vcf
+
+
+
+
+
+
